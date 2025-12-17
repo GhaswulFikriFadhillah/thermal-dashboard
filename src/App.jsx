@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { LayoutDashboard, History, Activity, BarChart2, Edit3, Trash2, Info, X, HelpCircle, CheckCircle, ChevronRight, ServerCrash, BrainCircuit } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Brush } from 'recharts';
+import { LayoutDashboard, History, Activity, Info, X, HelpCircle, CheckCircle, ChevronRight, ServerCrash, BrainCircuit } from 'lucide-react';
 
 // --- HELPER FUNCTIONS ---
 
-// ✅ FORMULA FROM NOTEBOOK: (0.8 * T) + ((H * T) / 500)
 const calculateTHI = (temp, humidity) => {
   const thi = (0.8 * temp) + ((humidity * temp) / 500);
   return parseFloat(thi.toFixed(2));
@@ -160,10 +159,10 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
                  {data.emoji}
                </div>
                <div className="flex flex-col">
-                  <span className={`text-sm md:text-base font-bold px-4 py-1.5 rounded-full border backdrop-blur-sm transition-all duration-300 ${data.statusColor || ''}`}>
-                      {data.statusLabel}
+                  <span className={`text-sm md:text-base font-bold px-4 py-1.5 rounded-full border backdrop-blur-sm transition-all duration-300 ${data.color || ''}`}>
+                      {data.title}
                   </span>
-                  <span className="text-xs text-slate-500 mt-1 ml-1">Current Condition</span>
+                  <span className="text-xs text-slate-500 mt-1 ml-1">Kondisi Saat Ini</span>
                </div>
             </div>
 
@@ -174,7 +173,7 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
             </div>
          </div>
          
-         <div className={`absolute -right-10 -bottom-10 w-32 h-32 rounded-full blur-3xl opacity-10 transition-colors duration-500 ${data.statusColor?.includes('emerald') ? 'bg-emerald-500' : data.statusColor?.includes('yellow') ? 'bg-yellow-500' : 'bg-rose-500'}`}></div>
+         <div className={`absolute -right-10 -bottom-10 w-32 h-32 rounded-full blur-3xl opacity-10 transition-colors duration-500 ${data.color?.includes('emerald') ? 'bg-emerald-500' : data.color?.includes('yellow') ? 'bg-yellow-500' : data.color?.includes('blue') ? 'bg-blue-500' : 'bg-rose-500'}`}></div>
       </div>
 
       {isEmpty && (
@@ -186,47 +185,67 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
   );
 });
 
-// 3. HISTORY PAGE (UPDATED WITH AI COMPARISON)
+// 3. HISTORY PAGE (UPDATED - SHOWS DATE AND SECONDS)
 const HistoryPage = memo(({ sensorData }) => {
-  // We process Real Data here
   const chartData = useMemo(() => {
-    // Reverse array so chart goes Left(Old) -> Right(New)
+    // We reverse to get chronological order (Oldest -> Newest) for the chart
     return [...sensorData].reverse().map(d => {
-      // Calculate real THI for comparison
       const realTHI = d.thi || calculateTHI(d.temp, d.hum);
       return {
         ...d,
         thi: realTHI,
-        // Ensure forecast exists, format it
         thi_forecast: d.thi_forecast ? parseFloat(d.thi_forecast) : null
       };
     });
   }, [sensorData]);
 
+  // ✅ VISUALIZATION CHANGED: Shows Date + Time + Seconds (e.g., "17 Dec 14:30:05")
   const formatXAxis = (tickItem) => {
     if (!tickItem) return '';
     const date = new Date(tickItem);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleString('id-ID', { 
+        day: 'numeric', 
+        month: 'short', 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit', // ✅ ADDED SECONDS
+        hour12: false
+    });
   };
 
-  // Special Card for Double Area Chart (Actual vs Forecast)
   const AIComparisonCard = () => {
+    const latestData = chartData.length > 0 ? chartData[chartData.length - 1] : null;
+    const latestForecast = latestData && latestData.thi_forecast 
+        ? latestData.thi_forecast.toFixed(2) 
+        : '--';
+
     return (
         <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/30 shadow-lg col-span-1 lg:col-span-2 xl:col-span-3">
-            <div className="mb-4 flex justify-between items-center">
-                <div className="flex items-center gap-3">
-                    <div className="bg-indigo-500/20 p-2 rounded-lg"><BrainCircuit className="text-indigo-400" size={24}/></div>
-                    <div>
-                        <p className="text-slate-400 text-sm mb-1">AI Performance Analysis</p>
-                        <h3 className="text-xl font-bold text-white">Actual THI vs Predicted</h3>
+            <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-4">
+                     <div className="bg-indigo-500/20 p-3 rounded-xl">
+                        <BrainCircuit className="text-indigo-400" size={32}/>
+                     </div>
+                     <div>
+                        <p className="text-slate-400 text-sm font-medium mb-1">AI Forecast (Next 1 Minute)</p>
+                        <div className="flex items-baseline gap-2">
+                            <h3 className="text-4xl font-bold text-white">{latestForecast}</h3>
+                            <span className="text-sm text-slate-500 font-bold">THI</span>
+                        </div>
+                     </div>
+                </div>
+                
+                <div className="flex gap-4 text-xs bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
+                    <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-pink-500"></span> Real Data
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400"></span> AI Prediction
                     </div>
                 </div>
-                <div className="flex gap-4 text-xs">
-                    <div className="flex items-center gap-1"><div className="w-3 h-3 bg-pink-500 rounded-full"></div>Real Data</div>
-                    <div className="flex items-center gap-1"><div className="w-3 h-3 bg-indigo-400 rounded-full"></div>AI Forecast</div>
-                </div>
             </div>
-            <div className="h-72 w-full">
+
+            <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <defs>
@@ -240,16 +259,37 @@ const HistoryPage = memo(({ sensorData }) => {
                             </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                        <XAxis dataKey="timestamp" tickFormatter={formatXAxis} stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} width={40} domain={['auto', 'auto']} />
-                        <Tooltip 
-                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff' }}
-                            labelFormatter={(label) => `Waktu: ${formatXAxis(label)}`}
+                        
+                        {/* ✅ XAXIS: Updated to show Seconds and ensure spacing */}
+                        <XAxis 
+                            dataKey="timestamp" 
+                            tickFormatter={formatXAxis} 
+                            stroke="#64748b" 
+                            fontSize={10} // Smaller font to fit date+time+seconds
+                            tickLine={false} 
+                            axisLine={false} 
+                            minTickGap={80} // Increased gap so the long labels don't overlap
+                            interval="preserveStartEnd" 
                         />
-                        {/* Real THI Area */}
-                        <Area type="monotone" dataKey="thi" name="Real THI" stroke="#ec4899" strokeWidth={2} fill="url(#colorReal)" />
-                        {/* AI Forecast Area (Dashed or Lighter) */}
-                        <Area type="monotone" dataKey="thi_forecast" name="AI Predicted" stroke="#818cf8" strokeWidth={2} strokeDasharray="5 5" fill="url(#colorAI)" />
+                        
+                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} width={40} domain={['auto', 'auto']} />
+                        
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff' }} 
+                            labelFormatter={(label) => `Waktu: ${formatXAxis(label)}`} 
+                        />
+                        
+                        <Area type="monotone" dataKey="thi" name="Real THI" stroke="#ec4899" strokeWidth={2} strokeOpacity={0.6} fill="url(#colorReal)" />
+                        <Area type="monotone" dataKey="thi_forecast" name="AI Predicted" stroke="#818cf8" strokeWidth={3} fill="url(#colorAI)" />
+                        
+                        {/* SLIDER (BRUSH) */}
+                        <Brush 
+                            dataKey="timestamp" 
+                            height={30} 
+                            stroke="#818cf8" 
+                            tickFormatter={() => ""}
+                            fill="#1e293b" 
+                        />
                     </AreaChart>
                 </ResponsiveContainer>
             </div>
@@ -293,12 +333,8 @@ const HistoryPage = memo(({ sensorData }) => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h2 className="text-2xl font-bold text-white text-center md:text-left">Live Database History</h2>
-      
-      {/* 1. Comparison Chart (Big) */}
+      <h2 className="text-2xl font-bold text-white text-center md:text-left">Full Database History</h2>
       <AIComparisonCard />
-
-      {/* 2. Small Individual Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Suhu (°C)" dataKey="temp" color="#60a5fa" />
         <ChartCard title="Kelembaban (%)" dataKey="hum" color="#34d399" />
@@ -307,7 +343,7 @@ const HistoryPage = memo(({ sensorData }) => {
   );
 });
 
-// 4. REALTIME PAGE (UPDATED TABLE)
+// 4. REALTIME PAGE
 const RealtimePage = memo(({ sensorData }) => {
   return (
     <div className="space-y-6 animate-fade-in">
@@ -329,10 +365,14 @@ const RealtimePage = memo(({ sensorData }) => {
               {sensorData.map((row, idx) => {
                   const thi = row.thi || calculateTHI(row.temp, row.hum);
                   const forecast = row.thi_forecast ? parseFloat(row.thi_forecast).toFixed(2) : '--';
+                  // ✅ FULL DATE FORMAT FOR TABLE
+                  const dateStr = new Date(row.timestamp).toLocaleString('id-ID', {
+                      day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit'
+                  });
                   return (
                     <tr key={idx} className="hover:bg-slate-700/30 transition-colors">
                       <td className="px-6 py-4 text-slate-400 font-mono text-xs">
-                        {new Date(row.timestamp).toLocaleString()}
+                        {dateStr}
                       </td>
                       <td className="px-6 py-4 text-white">{row.temp}°C</td>
                       <td className="px-6 py-4 text-white">{row.hum}%</td>
@@ -357,58 +397,7 @@ const RealtimePage = memo(({ sensorData }) => {
   );
 });
 
-// 5. TABLEAU PAGE
-const TableauPage = () => {
-  const [embedUrl, setEmbedUrl] = useState(() => localStorage.getItem('tableau_embed_url') || '');
-  const [isEmbedded, setIsEmbedded] = useState(() => !!localStorage.getItem('tableau_embed_url'));
-  const [inputValue, setInputValue] = useState(() => localStorage.getItem('tableau_embed_url') || '');
-
-  const handleEmbed = () => {
-    if (inputValue.trim()) {
-      let finalUrl = inputValue.trim();
-      if (!finalUrl.includes('?')) finalUrl += '?:embed=yes&:showVizHome=no';
-      localStorage.setItem('tableau_embed_url', finalUrl);
-      setEmbedUrl(finalUrl);
-      setIsEmbedded(true);
-    }
-  };
-
-  const handleDelete = () => {
-    localStorage.removeItem('tableau_embed_url');
-    setIsEmbedded(false); 
-    setEmbedUrl(''); 
-    setInputValue('');
-  };
-
-  return (
-    <div className="space-y-6 animate-fade-in h-full flex flex-col">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-white">Tableau Visualization</h2>
-        {isEmbedded && (
-          <div className="flex gap-2">
-            <button onClick={() => setIsEmbedded(false)} className="px-3 py-1 bg-yellow-600/20 text-yellow-500 rounded text-sm"><Edit3 size={14} /></button>
-            <button onClick={handleDelete} className="px-3 py-1 bg-rose-600/20 text-rose-500 rounded text-sm"><Trash2 size={14} /></button>
-          </div>
-        )}
-      </div>
-      <div className="w-full h-[600px] bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden relative">
-        {!isEmbedded ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-            <BarChart2 size={64} className="mb-4 text-slate-600" />
-            <div className="flex gap-2 w-full max-w-md">
-              <input type="text" value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Paste Tableau Public Link..." className="flex-1 bg-slate-900 border border-slate-700 text-white rounded px-4 py-2" />
-              <button onClick={handleEmbed} className="px-6 py-2 bg-blue-600 text-white rounded">Load</button>
-            </div>
-          </div>
-        ) : (
-          <iframe src={embedUrl} className="w-full h-full border-0 bg-white" title="Tableau Dashboard" />
-        )}
-      </div>
-    </div>
-  );
-};
-
-// 6. SETTINGS PAGE (Simplified since we use Auto-Fetch)
+// 5. SETTINGS PAGE
 const SettingsPage = () => (
   <div className="space-y-6 animate-fade-in">
      <h2 className="text-2xl font-bold text-white">System Settings</h2>
@@ -417,7 +406,7 @@ const SettingsPage = () => (
              <div className="bg-emerald-500/20 p-3 rounded-full"><Activity size={24}/></div>
              <div>
                  <h3 className="font-bold text-white">Live Data Mode Active</h3>
-                 <p className="text-sm text-slate-400">Dashboard is currently fetching data from MongoDB (Port 5000) every 5 seconds.</p>
+                 <p className="text-sm text-slate-400">Dashboard is currently fetching data from MongoDB (Port 5000) every 2 seconds.</p>
              </div>
         </div>
      </div>
@@ -429,12 +418,11 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [sensorData, setSensorData] = useState([]);
   const [isError, setIsError] = useState(false);
-  
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const currentData = useMemo(() => {
      if (sensorData.length === 0) {
-         return { temp: 0, hum: 0, thi: 0, statusLabel: 'Waiting...', statusColor: 'bg-slate-700', emoji: '⏳', title: '-', suggestion: 'Waiting for sensor data...' };
+         return { temp: 0, hum: 0, thi: 0, title: '-', label: 'Waiting', color: 'bg-slate-700', emoji: '⏳', suggestion: 'Waiting for sensor data...' };
      }
      const latest = sensorData[0]; 
      const thi = latest.thi || calculateTHI(latest.temp, latest.hum);
@@ -447,7 +435,6 @@ export default function App() {
      };
   }, [sensorData]);
 
-  // --- FETCHING LOGIC ---
   const fetchData = async () => {
     try {
         const response = await fetch('http://localhost:5000/api/readings');
@@ -463,7 +450,8 @@ export default function App() {
 
   useEffect(() => {
     fetchData(); 
-    const interval = setInterval(fetchData, 5000); 
+    // 2 seconds interval
+    const interval = setInterval(fetchData, 60000); 
     return () => clearInterval(interval);
   }, []);
 
@@ -472,8 +460,8 @@ export default function App() {
       <div className="text-center">
         <div className="text-6xl mb-2">{currentData.emoji}</div>
         <h2 className="text-2xl font-bold text-white">{currentData.title}</h2>
-        <p className={`inline-block px-3 py-1 rounded-full text-xs font-bold border mt-2 ${currentData.statusColor}`}>
-          {currentData.statusLabel}
+        <p className={`inline-block px-3 py-1 rounded-full text-xs font-bold border mt-2 ${currentData.color}`}>
+          {currentData.label}
         </p>
       </div>
       <div className="bg-slate-700/30 p-4 rounded-xl border border-slate-600/50 mt-4">
@@ -495,7 +483,7 @@ export default function App() {
               <span className="font-bold text-lg text-white tracking-tight">Thermal Comfort Dashboard</span>
             </div>
             <div className="hidden md:flex items-center space-x-1 ml-auto">
-              {['overview', 'history', 'realtime', 'tableau', 'settings'].map((id) => (
+              {['overview', 'history', 'realtime', 'settings'].map((id) => (
                 <button
                   key={id}
                   onClick={() => setActiveTab(id)}
@@ -522,11 +510,9 @@ export default function App() {
         )}
         {activeTab === 'history' && <HistoryPage sensorData={sensorData} />}
         {activeTab === 'realtime' && <RealtimePage sensorData={sensorData} />}
-        {activeTab === 'tableau' && <TableauPage />}
         {activeTab === 'settings' && <SettingsPage />}
       </main>
       
-      {/* INFO MODAL */}
       <InfoModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
