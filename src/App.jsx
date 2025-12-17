@@ -1,20 +1,16 @@
 import React, { useState, useEffect, useMemo, memo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { LayoutDashboard, History, Activity, BarChart2, Upload, Edit3, Trash2, Info, X, HelpCircle, CheckCircle, ChevronRight, ServerCrash } from 'lucide-react';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { LayoutDashboard, History, Activity, BarChart2, Edit3, Trash2, Info, X, HelpCircle, CheckCircle, ChevronRight, ServerCrash, BrainCircuit } from 'lucide-react';
 
 // --- HELPER FUNCTIONS ---
 
-// ✅ UPDATED: Formula from THIndoor.ipynb
+// ✅ FORMULA FROM NOTEBOOK: (0.8 * T) + ((H * T) / 500)
 const calculateTHI = (temp, humidity) => {
-  // Formula: (0.8 * T) + ((H * T) / 500)
   const thi = (0.8 * temp) + ((humidity * temp) / 500);
-  return parseFloat(thi.toFixed(2)); // Using 2 decimals for better precision
+  return parseFloat(thi.toFixed(2));
 };
 
 const getComfortStatus = (thi) => {
-  // Adjusted thresholds based on common tropical THI ranges
-  // < 21: Cold | 21-24: Comfortable | 24-26: Warm | > 26: Hot
-  // You can adjust these numbers to match your specific comfort preference
   if (thi < 21) {
     return { 
         label: 'Cool / Cold', 
@@ -56,7 +52,6 @@ const getComfortStatus = (thi) => {
 
 // --- KOMPONEN UI TERPISAH ---
 
-// 1. MODAL COMPONENT
 const InfoModal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
@@ -100,7 +95,8 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
         <HelpCircle size={14} /> Detail Info
       </button>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+      {/* TOP STATS */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
         <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 shadow-lg transition-all duration-300">
           <p className="text-slate-400 mb-2 font-medium">Temperature</p>
           <span className="text-5xl font-bold text-white transition-all duration-300">{isEmpty ? '--' : data.temp}°C</span>
@@ -109,6 +105,18 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
           <p className="text-slate-400 mb-2 font-medium">Humidity</p>
           <span className="text-5xl font-bold text-white transition-all duration-300">{isEmpty ? '--' : data.hum}%</span>
         </div>
+        
+        {/* NEW AI FORECAST CARD */}
+        <div className="bg-indigo-900/20 p-6 rounded-xl border border-indigo-500/30 shadow-lg transition-all duration-300 relative overflow-hidden">
+          <div className="flex items-center gap-2 mb-2">
+            <BrainCircuit size={16} className="text-indigo-400" />
+            <p className="text-indigo-300 font-medium text-sm">AI Forecast (Next Min)</p>
+          </div>
+          <span className="text-5xl font-bold text-indigo-100 transition-all duration-300">
+            {data.thi_forecast ? parseFloat(data.thi_forecast).toFixed(2) : '--'}
+          </span>
+          <p className="text-xs text-indigo-400 mt-2">Predicted THI</p>
+        </div>
       </div>
 
       <div className="bg-slate-800/50 p-8 rounded-xl border border-slate-700/50 shadow-lg mt-8">
@@ -116,14 +124,12 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
            <span>THI Gauge (Notebook Formula)</span>
            <span className="text-white font-bold transition-all duration-300">{isEmpty ? '--' : data.thi}</span>
         </div>
-        {/* Adjusted Gauge Scale for Notebook Formula range (roughly 20 - 30) */}
         <div className="h-4 w-full bg-slate-900 rounded-full overflow-hidden relative">
           <div className={`h-full transition-all duration-1000 ease-out rounded-full ${
               data.thi >= 29 ? 'bg-gradient-to-r from-orange-500 to-red-600' : 
               data.thi >= 26 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' : 
               data.thi >= 21 ? 'bg-emerald-500' : 'bg-blue-500'
             }`}
-            // Mapping range 20-35 to 0-100% width for visualization
             style={{ width: `${Math.min(Math.max((data.thi - 20) * (100/15), 5), 100)}%` }}
           ></div>
         </div>
@@ -134,7 +140,7 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
         </div>
       </div>
       
-      {/* CARD COMFORT STATUS */}
+      {/* COMFORT STATUS CARD */}
       <div 
         onClick={onOpenModal}
         className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 shadow-lg cursor-pointer hover:bg-slate-800 transition-all duration-300 group mt-6 relative overflow-hidden"
@@ -180,16 +186,19 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
   );
 });
 
-// 3. HISTORY PAGE
+// 3. HISTORY PAGE (UPDATED WITH AI COMPARISON)
 const HistoryPage = memo(({ sensorData }) => {
   // We process Real Data here
   const chartData = useMemo(() => {
     // Reverse array so chart goes Left(Old) -> Right(New)
     return [...sensorData].reverse().map(d => {
+      // Calculate real THI for comparison
+      const realTHI = d.thi || calculateTHI(d.temp, d.hum);
       return {
         ...d,
-        // Use backend value if exists, otherwise use our global function
-        thi: d.thi || calculateTHI(d.temp, d.hum)
+        thi: realTHI,
+        // Ensure forecast exists, format it
+        thi_forecast: d.thi_forecast ? parseFloat(d.thi_forecast) : null
       };
     });
   }, [sensorData]);
@@ -200,26 +209,70 @@ const HistoryPage = memo(({ sensorData }) => {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Special Card for Double Area Chart (Actual vs Forecast)
+  const AIComparisonCard = () => {
+    return (
+        <div className="bg-slate-800/50 p-6 rounded-xl border border-indigo-500/30 shadow-lg col-span-1 lg:col-span-2 xl:col-span-3">
+            <div className="mb-4 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                    <div className="bg-indigo-500/20 p-2 rounded-lg"><BrainCircuit className="text-indigo-400" size={24}/></div>
+                    <div>
+                        <p className="text-slate-400 text-sm mb-1">AI Performance Analysis</p>
+                        <h3 className="text-xl font-bold text-white">Actual THI vs Predicted</h3>
+                    </div>
+                </div>
+                <div className="flex gap-4 text-xs">
+                    <div className="flex items-center gap-1"><div className="w-3 h-3 bg-pink-500 rounded-full"></div>Real Data</div>
+                    <div className="flex items-center gap-1"><div className="w-3 h-3 bg-indigo-400 rounded-full"></div>AI Forecast</div>
+                </div>
+            </div>
+            <div className="h-72 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <defs>
+                            <linearGradient id="colorReal" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#ec4899" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
+                            </linearGradient>
+                            <linearGradient id="colorAI" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                            </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                        <XAxis dataKey="timestamp" tickFormatter={formatXAxis} stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} width={40} domain={['auto', 'auto']} />
+                        <Tooltip 
+                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff' }}
+                            labelFormatter={(label) => `Waktu: ${formatXAxis(label)}`}
+                        />
+                        {/* Real THI Area */}
+                        <Area type="monotone" dataKey="thi" name="Real THI" stroke="#ec4899" strokeWidth={2} fill="url(#colorReal)" />
+                        {/* AI Forecast Area (Dashed or Lighter) */}
+                        <Area type="monotone" dataKey="thi_forecast" name="AI Predicted" stroke="#818cf8" strokeWidth={2} strokeDasharray="5 5" fill="url(#colorAI)" />
+                    </AreaChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    );
+  };
+
   const ChartCard = ({ title, dataKey, color }) => {
     const lastVal = chartData.length > 0 ? chartData[chartData.length - 1][dataKey] : 0;
-    
-    // Helper to format number display
-    const displayVal = typeof lastVal === 'number' ? lastVal.toFixed(2) : lastVal;
+    const displayVal = typeof lastVal === 'number' ? lastVal.toFixed(2) : '--';
 
     return (
       <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 shadow-lg">
         <div className="mb-4 flex justify-between items-start">
           <div>
             <p className="text-slate-400 text-sm mb-1">{title}</p>
-            <h3 className="text-4xl font-bold text-white mb-1 transition-all duration-300">
-              {displayVal}
-            </h3>
+            <h3 className="text-4xl font-bold text-white mb-1">{displayVal}</h3>
           </div>
           <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded animate-pulse">LIVE DB</span>
         </div>
-        <div className="h-64 w-full">
+        <div className="h-48 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <AreaChart data={chartData}>
               <defs>
                 <linearGradient id={`color${dataKey}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={color} stopOpacity={0.3}/>
@@ -227,34 +280,10 @@ const HistoryPage = memo(({ sensorData }) => {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-              <XAxis 
-                dataKey="timestamp" 
-                tickFormatter={formatXAxis} 
-                stroke="#64748b" 
-                fontSize={12} 
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis 
-                stroke="#64748b" 
-                fontSize={12} 
-                tickLine={false} 
-                axisLine={false} 
-                width={40}
-              />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff', borderRadius: '8px' }}
-                labelFormatter={(label) => `Waktu: ${formatXAxis(label)}`}
-                formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : value, title]}
-              />
-              <Area 
-                type="monotone" 
-                dataKey={dataKey} 
-                stroke={color} 
-                strokeWidth={3} 
-                fill={`url(#color${dataKey})`} 
-                isAnimationActive={false} 
-              />
+              <XAxis dataKey="timestamp" hide />
+              <YAxis hide domain={['auto', 'auto']}/>
+              <Tooltip contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155' }} labelFormatter={() => ''} />
+              <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={3} fill={`url(#color${dataKey})`} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -265,16 +294,20 @@ const HistoryPage = memo(({ sensorData }) => {
   return (
     <div className="space-y-6 animate-fade-in">
       <h2 className="text-2xl font-bold text-white text-center md:text-left">Live Database History</h2>
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      
+      {/* 1. Comparison Chart (Big) */}
+      <AIComparisonCard />
+
+      {/* 2. Small Individual Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Suhu (°C)" dataKey="temp" color="#60a5fa" />
         <ChartCard title="Kelembaban (%)" dataKey="hum" color="#34d399" />
-        <ChartCard title="THI Index" dataKey="thi" color="#f472b6" />
       </div>
     </div>
   );
 });
 
-// 4. REALTIME PAGE (TABLE)
+// 4. REALTIME PAGE (UPDATED TABLE)
 const RealtimePage = memo(({ sensorData }) => {
   return (
     <div className="space-y-6 animate-fade-in">
@@ -287,13 +320,15 @@ const RealtimePage = memo(({ sensorData }) => {
                 <th className="px-6 py-4">Time</th>
                 <th className="px-6 py-4">Temp</th>
                 <th className="px-6 py-4">Hum</th>
-                <th className="px-6 py-4">THI</th>
+                <th className="px-6 py-4 text-pink-400">Real THI</th>
+                <th className="px-6 py-4 text-indigo-400">AI Forecast</th>
                 <th className="px-6 py-4">Source</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700/50">
               {sensorData.map((row, idx) => {
                   const thi = row.thi || calculateTHI(row.temp, row.hum);
+                  const forecast = row.thi_forecast ? parseFloat(row.thi_forecast).toFixed(2) : '--';
                   return (
                     <tr key={idx} className="hover:bg-slate-700/30 transition-colors">
                       <td className="px-6 py-4 text-slate-400 font-mono text-xs">
@@ -301,7 +336,8 @@ const RealtimePage = memo(({ sensorData }) => {
                       </td>
                       <td className="px-6 py-4 text-white">{row.temp}°C</td>
                       <td className="px-6 py-4 text-white">{row.hum}%</td>
-                      <td className="px-6 py-4 text-slate-300">{thi}</td>
+                      <td className="px-6 py-4 text-pink-300 font-bold">{thi}</td>
+                      <td className="px-6 py-4 text-indigo-300 font-mono">{forecast}</td>
                       <td className="px-6 py-4">
                         <span className="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">MongoDB</span>
                       </td>
@@ -310,7 +346,7 @@ const RealtimePage = memo(({ sensorData }) => {
               })}
               {sensorData.length === 0 && (
                   <tr>
-                      <td colSpan="5" className="px-6 py-8 text-center text-slate-500">No data received yet...</td>
+                      <td colSpan="6" className="px-6 py-8 text-center text-slate-500">No data received yet...</td>
                   </tr>
               )}
             </tbody>
@@ -394,15 +430,12 @@ export default function App() {
   const [sensorData, setSensorData] = useState([]);
   const [isError, setIsError] = useState(false);
   
-  // State Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Derived state for the "Latest" reading
   const currentData = useMemo(() => {
      if (sensorData.length === 0) {
          return { temp: 0, hum: 0, thi: 0, statusLabel: 'Waiting...', statusColor: 'bg-slate-700', emoji: '⏳', title: '-', suggestion: 'Waiting for sensor data...' };
      }
-     // The API returns [Newest, ..., Oldest], so index 0 is the latest
      const latest = sensorData[0]; 
      const thi = latest.thi || calculateTHI(latest.temp, latest.hum);
      const status = getComfortStatus(thi);
@@ -429,8 +462,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    fetchData(); // Initial fetch
-    const interval = setInterval(fetchData, 5000); // Poll every 5 seconds
+    fetchData(); 
+    const interval = setInterval(fetchData, 5000); 
     return () => clearInterval(interval);
   }, []);
 

@@ -19,12 +19,13 @@ mongoose.connect(MONGO_URI)
   .catch(err => console.error("❌ DB Connection Error:", err));
 
 // --- CHANGE 2: UPDATE COLLECTION NAME ---
+// Inside server.js
 const sensorSchema = new mongoose.Schema({
   temp: Number,
   hum: Number,
+  thi_forecast: Number, // <--- ADD THIS LINE!
   timestamp: { type: Date, default: Date.now }
 }, { 
-  // This tells Mongoose: "Don't add 's' to the end, just use this exact name"
   collection: 'SensorKelompok8' 
 });
 
