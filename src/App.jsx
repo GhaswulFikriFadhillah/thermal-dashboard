@@ -450,7 +450,7 @@ export default function App() {
 
   useEffect(() => {
     fetchData(); 
-    // 2 seconds interval
+    // 1 minute interval
     const interval = setInterval(fetchData, 60000); 
     return () => clearInterval(interval);
   }, []);
