@@ -1,5 +1,6 @@
 # How to run the dashboard
 **npm run dev** to run the dashboard
+
 **node server.js** to fetch the API endpoint of the mongodb
 
 
