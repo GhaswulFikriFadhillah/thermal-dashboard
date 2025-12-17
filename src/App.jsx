@@ -3,14 +3,28 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { LayoutDashboard, History, Activity, BarChart2, Upload, Edit3, Trash2, Info, X, HelpCircle, CheckCircle, ChevronRight, ServerCrash } from 'lucide-react';
 
 // --- HELPER FUNCTIONS ---
+
+// ✅ UPDATED: Formula from THIndoor.ipynb
 const calculateTHI = (temp, humidity) => {
-  const rhDecimal = humidity / 100;
-  const thi = (0.8 * temp) + (rhDecimal * (temp - 14.4)) + 46.4;
-  return parseFloat(thi.toFixed(1));
+  // Formula: (0.8 * T) + ((H * T) / 500)
+  const thi = (0.8 * temp) + ((humidity * temp) / 500);
+  return parseFloat(thi.toFixed(2)); // Using 2 decimals for better precision
 };
 
 const getComfortStatus = (thi) => {
-  if (thi < 70) {
+  // Adjusted thresholds based on common tropical THI ranges
+  // < 21: Cold | 21-24: Comfortable | 24-26: Warm | > 26: Hot
+  // You can adjust these numbers to match your specific comfort preference
+  if (thi < 21) {
+    return { 
+        label: 'Cool / Cold', 
+        color: 'bg-blue-500/20 text-blue-400 border-blue-500/50', 
+        emoji: '🥶', 
+        title: 'Sejuk', 
+        suggestion: 'Suhu cukup rendah. Kurangi pendingin ruangan.',
+        alertLevel: 'info' 
+      };
+  } else if (thi >= 21 && thi <= 26) { 
     return { 
       label: 'Comfortable', 
       color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/50', 
@@ -19,7 +33,7 @@ const getComfortStatus = (thi) => {
       suggestion: 'Kondisi ruangan optimal. Pertahankan ventilasi saat ini.',
       alertLevel: 'normal' 
     };
-  } else if (thi >= 70 && thi < 75) {
+  } else if (thi > 26 && thi < 29) {
     return { 
       label: 'Slightly Uncomfortable', 
       color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/50', 
@@ -99,21 +113,24 @@ const OverviewPage = memo(({ data, onOpenModal, isEmpty, isError }) => {
 
       <div className="bg-slate-800/50 p-8 rounded-xl border border-slate-700/50 shadow-lg mt-8">
         <div className="flex justify-between text-slate-400 mb-2">
-           <span>THI Gauge</span>
+           <span>THI Gauge (Notebook Formula)</span>
            <span className="text-white font-bold transition-all duration-300">{isEmpty ? '--' : data.thi}</span>
         </div>
+        {/* Adjusted Gauge Scale for Notebook Formula range (roughly 20 - 30) */}
         <div className="h-4 w-full bg-slate-900 rounded-full overflow-hidden relative">
           <div className={`h-full transition-all duration-1000 ease-out rounded-full ${
-              data.thi >= 75 ? 'bg-gradient-to-r from-orange-500 to-red-600' : 
-              data.thi >= 70 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' : 'bg-blue-500'
+              data.thi >= 29 ? 'bg-gradient-to-r from-orange-500 to-red-600' : 
+              data.thi >= 26 ? 'bg-gradient-to-r from-yellow-500 to-orange-500' : 
+              data.thi >= 21 ? 'bg-emerald-500' : 'bg-blue-500'
             }`}
-            style={{ width: `${Math.min((data.thi / 100) * 100, 100)}%` }}
+            // Mapping range 20-35 to 0-100% width for visualization
+            style={{ width: `${Math.min(Math.max((data.thi - 20) * (100/15), 5), 100)}%` }}
           ></div>
         </div>
         <div className="flex justify-between text-xs text-slate-500 mt-2">
-            <span>0 (Cool)</span>
-            <span>70 (Limit)</span>
-            <span>100 (Hot)</span>
+            <span>20 (Cool)</span>
+            <span>26 (Limit)</span>
+            <span>35 (Hot)</span>
         </div>
       </div>
       
@@ -168,12 +185,13 @@ const HistoryPage = memo(({ sensorData }) => {
   // We process Real Data here
   const chartData = useMemo(() => {
     // Reverse array so chart goes Left(Old) -> Right(New)
-    // The API sends [Newest, ..., Oldest], so we reverse it for the chart
-    return [...sensorData].reverse().map(d => ({
+    return [...sensorData].reverse().map(d => {
+      return {
         ...d,
-        // Ensure THI is calculated if backend doesn't send it, or use existing
+        // Use backend value if exists, otherwise use our global function
         thi: d.thi || calculateTHI(d.temp, d.hum)
-    }));
+      };
+    });
   }, [sensorData]);
 
   const formatXAxis = (tickItem) => {
@@ -184,12 +202,18 @@ const HistoryPage = memo(({ sensorData }) => {
 
   const ChartCard = ({ title, dataKey, color }) => {
     const lastVal = chartData.length > 0 ? chartData[chartData.length - 1][dataKey] : 0;
+    
+    // Helper to format number display
+    const displayVal = typeof lastVal === 'number' ? lastVal.toFixed(2) : lastVal;
+
     return (
       <div className="bg-slate-800/50 p-6 rounded-xl border border-slate-700/50 shadow-lg">
         <div className="mb-4 flex justify-between items-start">
           <div>
             <p className="text-slate-400 text-sm mb-1">{title}</p>
-            <h3 className="text-4xl font-bold text-white mb-1 transition-all duration-300">{lastVal}</h3>
+            <h3 className="text-4xl font-bold text-white mb-1 transition-all duration-300">
+              {displayVal}
+            </h3>
           </div>
           <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded animate-pulse">LIVE DB</span>
         </div>
@@ -221,6 +245,7 @@ const HistoryPage = memo(({ sensorData }) => {
               <Tooltip 
                 contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff', borderRadius: '8px' }}
                 labelFormatter={(label) => `Waktu: ${formatXAxis(label)}`}
+                formatter={(value) => [typeof value === 'number' ? value.toFixed(2) : value, title]}
               />
               <Area 
                 type="monotone" 
